@@ -58,6 +58,16 @@ if have ccs; then
   echo
   echo "Try:  ccs help"
 else
-  warn "Installed, but 'ccs' isn't on PATH in THIS shell yet."
-  warn "Close this terminal, open a NEW one, then run:  ccs help"
+  bindir="$HOME/.local/bin"
+  warn "Installed to ${bindir}, but that dir isn't on PATH in your interactive shell yet."
+  warn "Make 'ccs' available now with EITHER:"
+  warn "  1) open a new terminal, OR"
+  warn "  2) reload your shell in place:  exec \$SHELL -l"
+  case "${SHELL##*/}" in
+    zsh)  warn "Still not found? Add to ~/.zshrc:   export PATH=\"\$HOME/.local/bin:\$PATH\"" ;;
+    bash) warn "Still not found? Add to ~/.bashrc:  export PATH=\"\$HOME/.local/bin:\$PATH\"" ;;
+    fish) warn "Still not found? Run:  fish_add_path \$HOME/.local/bin" ;;
+    *)    warn "Still not found? Add ${bindir} to your shell's PATH." ;;
+  esac
+  warn "Then run:  ccs help"
 fi
