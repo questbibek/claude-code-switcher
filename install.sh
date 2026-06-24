@@ -21,8 +21,37 @@ ok()   { printf 'OK  %s\n' "$1"; }
 warn() { printf '!   %s\n' "$1"; }
 fail() { printf 'Error: %s\n' "$1" >&2; exit 1; }
 
+BIN_DIR="$HOME/.local/bin"
+PATH_MARK="# >>> ccs installer: ensure ~/.local/bin on PATH >>>"
+
 # Make tools installed during this run (uv, the ccs shim) callable immediately.
-refresh_path() { export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"; }
+refresh_path() { export PATH="$BIN_DIR:$HOME/.cargo/bin:$PATH"; }
+
+# Persist BIN_DIR on PATH in the user's shell rc so `ccs` survives new terminals.
+# Idempotent (guarded by PATH_MARK) and a no-op if BIN_DIR is already on PATH.
+persist_path() {
+  case ":$PATH:" in *":$BIN_DIR:"*) return 0 ;; esac
+
+  local shell_name rc line
+  shell_name="${SHELL##*/}"
+  case "$shell_name" in
+    zsh)  rc="${ZDOTDIR:-$HOME}/.zshrc" ;;
+    bash) rc="$HOME/.bashrc" ;;
+    fish) rc="$HOME/.config/fish/config.fish" ;;
+    *)    rc="$HOME/.profile" ;;
+  esac
+
+  mkdir -p "$(dirname "$rc")" && touch "$rc"
+  grep -qF "$PATH_MARK" "$rc" 2>/dev/null && return 0
+
+  if [ "$shell_name" = "fish" ]; then
+    line="fish_add_path \"$BIN_DIR\""
+  else
+    line="export PATH=\"$BIN_DIR:\$PATH\""
+  fi
+  { printf '\n%s\n%s\n# <<< ccs installer <<<\n' "$PATH_MARK" "$line"; } >> "$rc"
+  ok "Added $BIN_DIR to PATH in $rc"
+}
 
 # --- prerequisite: git (needed to fetch the fork) ---
 have git || fail "git is required but not found. Install it via your package manager (e.g. apt install git, brew install git)."
@@ -48,26 +77,18 @@ else
   pipx install --force "$SPEC"
   pipx ensurepath 2>/dev/null || true
 fi
-refresh_path
+
+persist_path   # make sure ~/.local/bin is on PATH for FUTURE shells
+refresh_path   # ...and for THIS run, so the verify below works
 
 # --- verify ---
 echo
 if have ccs; then
-  ok "Installed:"
-  ccs --version
-  echo
-  echo "Try:  ccs help"
+  ok "Installed: $(ccs --version 2>/dev/null)"
 else
-  bindir="$HOME/.local/bin"
-  warn "Installed to ${bindir}, but that dir isn't on PATH in your interactive shell yet."
-  warn "Make 'ccs' available now with EITHER:"
-  warn "  1) open a new terminal, OR"
-  warn "  2) reload your shell in place:  exec \$SHELL -l"
-  case "${SHELL##*/}" in
-    zsh)  warn "Still not found? Add to ~/.zshrc:   export PATH=\"\$HOME/.local/bin:\$PATH\"" ;;
-    bash) warn "Still not found? Add to ~/.bashrc:  export PATH=\"\$HOME/.local/bin:\$PATH\"" ;;
-    fish) warn "Still not found? Run:  fish_add_path \$HOME/.local/bin" ;;
-    *)    warn "Still not found? Add ${bindir} to your shell's PATH." ;;
-  esac
-  warn "Then run:  ccs help"
+  warn "Installed to $BIN_DIR (couldn't verify 'ccs' in this run)."
 fi
+echo
+echo "PATH is set up for new terminals. To use 'ccs' right now in this shell:"
+echo "    exec \$SHELL -l        # or just open a new terminal"
+echo "Then:  ccs help"
