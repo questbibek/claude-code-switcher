@@ -10,7 +10,10 @@ Multi-account switcher for Claude Code. Easily switch between multiple Claude ac
 
 ### Install this fork (adds the `ccs` command)
 
-One-liner straight from the fork's `ccs` branch:
+One-liner straight from the fork's `ccs` branch. The script is self-contained:
+it checks your tools and **auto-installs `uv` if you don't have `uv`/`pipx`**
+(and `uv` will fetch a managed Python too), so the only thing you need first is
+**git**.
 
 **PowerShell:**
 ```powershell
@@ -22,19 +25,18 @@ iwr -useb https://raw.githubusercontent.com/questbibek/claude-code-switcher/ccs/
 curl -fsSL https://raw.githubusercontent.com/questbibek/claude-code-switcher/ccs/install.sh | bash
 ```
 
-Or with your installer directly (`uv` recommended, `pipx` works too):
+Prefer to drive it yourself? If you already have `uv` (or `pipx`):
 ```bash
 uv tool install --force "git+https://github.com/questbibek/claude-code-switcher.git@ccs"
 # or
 pipx install --force "git+https://github.com/questbibek/claude-code-switcher.git@ccs"
 ```
 
-Then open a **new terminal** and run `ccs help`. If `ccs` isn't found, add your
-installer's bin dir to PATH (`uv tool update-shell` or `pipx ensurepath`), then
-reopen the terminal.
+After installing, open a **new terminal** and run `ccs help`. If `ccs` isn't
+found, run `uv tool update-shell` (or `pipx ensurepath`) and reopen the terminal.
 
-To update later, re-run the same install command (the `--force` reinstalls the
-latest `ccs` branch).
+To update later, just re-run the installer (or the command above) — `--force`
+reinstalls the latest `ccs` branch.
 
 ---
 

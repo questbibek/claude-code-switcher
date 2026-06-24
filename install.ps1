@@ -1,11 +1,12 @@
-# Install the `ccs` command (claude-code-switcher fork) from the ccs branch.
+# Install / update the `ccs` command (claude-code-switcher fork), self-contained.
 #
-#   Run:  powershell -ExecutionPolicy Bypass -File .\install.ps1
-#   Or one-liner from anywhere:
-#     iwr -useb https://raw.githubusercontent.com/questbibek/claude-code-switcher/ccs/install.ps1 | iex
+#   Run locally:  powershell -ExecutionPolicy Bypass -File .\install.ps1
+#   One-liner:    iwr -useb https://raw.githubusercontent.com/questbibek/claude-code-switcher/ccs/install.ps1 | iex
 #
-# Installs the fork's `ccs` branch, which adds the memorable `ccs` command
-# (e.g. `ccs help`, `ccs switch <email>`) on top of `cswap` / `claude-swap`.
+# Adds the memorable `ccs` command (e.g. `ccs help`, `ccs switch <email>`) on top
+# of `cswap` / `claude-swap`. If no Python installer (uv/pipx) is present, this
+# bootstraps `uv` automatically. uv also fetches a managed Python if you don't
+# have a suitable one, so the only hard prerequisite is git.
 
 $ErrorActionPreference = "Stop"
 
@@ -13,34 +14,60 @@ $Repo   = "https://github.com/questbibek/claude-code-switcher.git"
 $Branch = "ccs"
 $Spec   = "git+$Repo@$Branch"
 
-function Have($name) { [bool](Get-Command $name -ErrorAction SilentlyContinue) }
+function Have($n){ [bool](Get-Command $n -ErrorAction SilentlyContinue) }
+function Info($m){ Write-Host "==> $m" -ForegroundColor Cyan }
+function Ok($m){   Write-Host "OK  $m" -ForegroundColor Green }
+function Warn($m){ Write-Host "!   $m" -ForegroundColor Yellow }
+function Fail($m){ Write-Host "Error: $m" -ForegroundColor Red; exit 1 }
 
-Write-Host "==> Installing ccs from $Repo@$Branch" -ForegroundColor Cyan
-
-if (Have "uv") {
-    Write-Host "  using: uv tool" -ForegroundColor DarkGray
-    uv tool install --force $Spec
-} elseif (Have "pipx") {
-    Write-Host "  using: pipx" -ForegroundColor DarkGray
-    pipx install --force $Spec
-} elseif (Have "python") {
-    Write-Host "  using: pip --user (uv/pipx not found)" -ForegroundColor DarkGray
-    python -m pip install --user --upgrade $Spec
-} else {
-    Write-Host "Error: need one of uv, pipx, or python on PATH." -ForegroundColor Red
-    Write-Host "Install uv:  iwr -useb https://astral.sh/uv/install.ps1 | iex" -ForegroundColor Yellow
-    exit 1
+# Pull Machine + User PATH from the registry so tools installed in this run
+# (uv, and the ccs shim) become callable without opening a new terminal.
+function Refresh-Path {
+    $machine = [System.Environment]::GetEnvironmentVariable("Path", "Machine")
+    $user    = [System.Environment]::GetEnvironmentVariable("Path", "User")
+    $local   = Join-Path $env:USERPROFILE ".local\bin"   # uv's default bin dir
+    $env:Path = ($machine, $user, $local | Where-Object { $_ }) -join ";"
 }
 
+# --- prerequisite: git (needed to fetch the fork) ---
+if (-not (Have "git")) {
+    Fail "git is required but not found. Install Git for Windows: https://git-scm.com/download/win"
+}
+
+# --- choose an installer; bootstrap uv if none exists ---
+$installer = if (Have "uv") { "uv" } elseif (Have "pipx") { "pipx" } else { $null }
+
+if (-not $installer) {
+    Info "No uv or pipx found - installing uv (one-time)..."
+    try {
+        Invoke-RestMethod https://astral.sh/uv/install.ps1 | Invoke-Expression
+    } catch {
+        Fail "uv install failed: $($_.Exception.Message)"
+    }
+    Refresh-Path
+    if (Have "uv") { Ok "uv installed"; $installer = "uv" }
+    else { Fail "uv was installed but isn't on PATH yet. Open a NEW terminal and re-run this script." }
+}
+
+# --- install ccs ---
+Info "Installing ccs from $Repo@$Branch (via $installer) ..."
+if ($installer -eq "uv") {
+    uv tool install --force $Spec
+    try { uv tool update-shell } catch {}
+} else {
+    pipx install --force $Spec
+    try { pipx ensurepath } catch {}
+}
+Refresh-Path
+
+# --- verify ---
 Write-Host ""
 if (Have "ccs") {
-    Write-Host "OK  Installed:" -ForegroundColor Green
+    Ok "Installed:"
     ccs --version
+    Write-Host ""
     Write-Host "Try:  ccs help" -ForegroundColor Cyan
 } else {
-    Write-Host "Installed, but 'ccs' is not on PATH in this shell yet." -ForegroundColor Yellow
-    Write-Host "Open a NEW terminal and run:  ccs help" -ForegroundColor Yellow
-    Write-Host "(If it still fails, ensure your installer's bin dir is on PATH:" -ForegroundColor DarkGray
-    Write-Host "   uv:   uv tool update-shell" -ForegroundColor DarkGray
-    Write-Host "   pipx: pipx ensurepath)" -ForegroundColor DarkGray
+    Warn "Installed, but 'ccs' isn't on PATH in THIS shell yet."
+    Warn "Close this terminal, open a NEW one, then run:  ccs help"
 }
