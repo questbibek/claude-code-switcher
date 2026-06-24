@@ -14,6 +14,25 @@ from claude_swap.printer import dimmed, error, muted
 from claude_swap.switcher import ClaudeAccountSwitcher
 
 
+def _prog_name() -> str:
+    """The command name to show in usage/help.
+
+    argparse otherwise defaults to ``os.path.basename(sys.argv[0])``, which for
+    an installed entry-point shim renders as an ugly absolute path (e.g.
+    ``python.exe C:\\Users\\me\\.local\\bin\\ccs``). We strip that down to the
+    bare command the user typed (``ccs`` / ``cswap`` / ``claude-swap``), falling
+    back to ``cswap`` for ``python -m claude_swap`` and odd launchers.
+    """
+    name = os.path.basename(sys.argv[0] or "")
+    for ext in (".exe", ".pyw", ".py"):
+        if name.lower().endswith(ext):
+            name = name[: -len(ext)]
+            break
+    if not name or name in {"__main__", "python", "python3", "py"}:
+        return "cswap"
+    return name
+
+
 # Memorable subcommand aliases → the long-standing flags they expand to. Lets
 # users type `ccs list`, `ccs status`, `ccs add`, etc. instead of `--list` /
 # `--status` / `--add-account`, which all still work. `switch` is special-cased
@@ -87,7 +106,7 @@ def _run_command(argv: list[str]) -> None:
         head, tail = argv, []
 
     parser = argparse.ArgumentParser(
-        prog="cswap run",
+        prog=f"{_prog_name()} run",
         description=(
             "[EXPERIMENTAL] Launch Claude Code as a stored account in this "
             "terminal only (the default login and other terminals are "
@@ -157,6 +176,7 @@ def main() -> None:
     argv = _translate_subcommand(argv)
 
     parser = argparse.ArgumentParser(
+        prog=_prog_name(),
         description="Multi-Account Switcher for Claude Code",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
