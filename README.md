@@ -4,6 +4,42 @@ Multi-account switcher for Claude Code. Easily switch between multiple Claude ac
 
 ## Installation
 
+> **Want the `ccs` command?** It only ships in this fork's `ccs` branch (the
+> upstream PyPI package has `cswap`/`claude-swap` but not `ccs`). Use
+> [Install this fork](#install-this-fork-adds-the-ccs-command) below.
+
+### Install this fork (adds the `ccs` command)
+
+One-liner straight from the fork's `ccs` branch:
+
+**PowerShell:**
+```powershell
+iwr -useb https://raw.githubusercontent.com/questbibek/claude-code-switcher/ccs/install.ps1 | iex
+```
+
+**macOS / Linux / WSL / Git Bash:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/questbibek/claude-code-switcher/ccs/install.sh | bash
+```
+
+Or with your installer directly (`uv` recommended, `pipx` works too):
+```bash
+uv tool install --force "git+https://github.com/questbibek/claude-code-switcher.git@ccs"
+# or
+pipx install --force "git+https://github.com/questbibek/claude-code-switcher.git@ccs"
+```
+
+Then open a **new terminal** and run `ccs help`. If `ccs` isn't found, add your
+installer's bin dir to PATH (`uv tool update-shell` or `pipx ensurepath`), then
+reopen the terminal.
+
+To update later, re-run the same install command (the `--force` reinstalls the
+latest `ccs` branch).
+
+---
+
+The upstream package (provides `cswap` / `claude-swap` only):
+
 ### Using uv (recommended)
 
 ```bash
@@ -35,6 +71,31 @@ pipx upgrade claude-swap
 ```
 
 ## Usage
+
+The tool installs three interchangeable command names — `ccs`, `cswap`, and
+`claude-swap` — use whichever you find easiest to remember.
+
+### Commands at a glance
+
+Memorable subcommands are the easy way in; the classic `--flags` still work and
+can be combined freely (`ccs switch --strategy best`, `ccs list --json`).
+
+| Subcommand | Does | Classic flag |
+|---|---|---|
+| `ccs help` | Show help | `--help` |
+| `ccs list` (`ls`) | List managed accounts | `--list` |
+| `ccs status` (`st`) | Show current account | `--status` |
+| `ccs switch` | Rotate to the next account | `--switch` |
+| `ccs switch <num\|email>` | Switch to a specific account | `--switch-to` |
+| `ccs add` | Add the current account | `--add-account` |
+| `ccs add-token [TOKEN\|-]` | Register a setup-token | `--add-token` |
+| `ccs remove <num\|email>` (`rm`) | Remove an account | `--remove-account` |
+| `ccs run <num\|email> [-- …]` | Run as an account, this terminal only | — |
+| `ccs export <path>` | Export accounts | `--export` |
+| `ccs import <path>` | Import accounts | `--import` |
+| `ccs tui` | Interactive arrow-key menu | `--tui` |
+| `ccs upgrade` (`update`) | Self-upgrade to latest | `--upgrade` |
+| `ccs purge` | Remove all claude-swap data | `--purge` |
 
 ### Add your first account
 

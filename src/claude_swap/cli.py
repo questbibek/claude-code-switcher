@@ -14,6 +14,58 @@ from claude_swap.printer import dimmed, error, muted
 from claude_swap.switcher import ClaudeAccountSwitcher
 
 
+# Memorable subcommand aliases → the long-standing flags they expand to. Lets
+# users type `ccs list`, `ccs status`, `ccs add`, etc. instead of `--list` /
+# `--status` / `--add-account`, which all still work. `switch` is special-cased
+# below (a bare `switch` rotates; `switch <target>` jumps to one account) and
+# `run` keeps its own positional parser, so neither is listed here.
+_SUBCOMMAND_FLAGS = {
+    "help": "--help",
+    "list": "--list",
+    "ls": "--list",
+    "status": "--status",
+    "st": "--status",
+    "add": "--add-account",
+    "add-token": "--add-token",
+    "remove": "--remove-account",
+    "rm": "--remove-account",
+    "export": "--export",
+    "import": "--import",
+    "purge": "--purge",
+    "upgrade": "--upgrade",
+    "update": "--upgrade",
+    "tui": "--tui",
+}
+
+
+def _translate_subcommand(argv: list[str]) -> list[str]:
+    """Rewrite a leading memorable subcommand into the equivalent flag argv.
+
+    ``argv`` is the args after the program name. The rewrite only fires when the
+    first token is a recognized verb (which never starts with '-'), so the
+    established ``--flag`` interface — and every existing test that drives it —
+    is left untouched. Tokens after the verb pass through verbatim, so flags
+    like ``--json``, ``--strategy``, ``--slot``, and ``--force`` keep combining
+    exactly as before (e.g. ``ccs switch --strategy best``, ``ccs list --json``).
+    """
+    if not argv:
+        return argv
+
+    verb, rest = argv[0], argv[1:]
+
+    if verb == "switch":
+        # Bare `switch` rotates; `switch <num|email>` jumps to that account.
+        if rest and not rest[0].startswith("-"):
+            return ["--switch-to", *rest]
+        return ["--switch", *rest]
+
+    flag = _SUBCOMMAND_FLAGS.get(verb)
+    if flag is not None:
+        return [flag, *rest]
+
+    return argv
+
+
 def _run_command(argv: list[str]) -> None:
     """Handle `cswap run NUM|EMAIL [--no-share] [-- <claude args>]`.
 
@@ -92,35 +144,48 @@ Examples:
 
 def main() -> None:
     """Main entry point for the CLI."""
-    if len(sys.argv) > 1 and sys.argv[1] == "run":
-        _run_command(sys.argv[2:])
+    argv = sys.argv[1:]
+
+    # `run` keeps its dedicated pre-dispatch parser (positional + `--` passthrough).
+    if argv and argv[0] == "run":
+        _run_command(argv[1:])
         return  # only reachable in tests where exec/exit is mocked
+
+    # Memorable subcommands (`ccs switch <email>`, `ccs list`, `ccs help`, ...)
+    # are rewritten to the equivalent flags so the original `--flag` interface
+    # keeps working unchanged.
+    argv = _translate_subcommand(argv)
 
     parser = argparse.ArgumentParser(
         description="Multi-Account Switcher for Claude Code",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Examples:
-  %(prog)s --add-account
-  %(prog)s --add-token sk-ant-oat01-...
-  %(prog)s --add-token sk-ant-oat01-... --slot 3
-  %(prog)s --add-token sk-ant-oat01-... --email me@example.com
-  %(prog)s --add-token - --slot 3
-  %(prog)s --list
-  %(prog)s --switch
-  %(prog)s --switch --strategy best             # switch to the account with most quota left
-  %(prog)s --switch --strategy next-available   # rotate, skipping rate-limited accounts
-  %(prog)s --switch-to 2
-  %(prog)s --switch-to user@example.com
-  %(prog)s run 2                            # run account 2 in this terminal only
-  %(prog)s run 2 -- --resume                # forward args after '--' to claude
-  %(prog)s --remove-account user@example.com
-  %(prog)s --status
-  %(prog)s --purge
-  %(prog)s --export backup.cswap
-  %(prog)s --import backup.cswap
-  %(prog)s --tui                              # interactive arrow-key menu
-  %(prog)s --upgrade                          # self-upgrade to latest version
+Commands (memorable shortcuts — the classic --flags still work):
+  %(prog)s help                       show this help
+  %(prog)s list                       list managed accounts          (--list)
+  %(prog)s status                     show current account           (--status)
+  %(prog)s switch                     rotate to the next account      (--switch)
+  %(prog)s switch <num|email>         switch to a specific account    (--switch-to)
+  %(prog)s add                        add the current account         (--add-account)
+  %(prog)s add-token [TOKEN|-]        register a setup-token          (--add-token)
+  %(prog)s remove <num|email>         remove an account               (--remove-account)
+  %(prog)s run <num|email> [-- ...]   run as an account, this terminal only
+  %(prog)s export <path>              export accounts                 (--export)
+  %(prog)s import <path>              import accounts                 (--import)
+  %(prog)s tui                        interactive arrow-key menu      (--tui)
+  %(prog)s upgrade                    self-upgrade to latest          (--upgrade)
+  %(prog)s purge                      remove all claude-swap data     (--purge)
+
+Aliases: ls=list  st=status  rm=remove  update=upgrade
+
+Flags combine with subcommands exactly as with the classic interface:
+  %(prog)s switch --strategy best           # pick the account with most quota left
+  %(prog)s switch --strategy next-available # rotate, skipping rate-limited accounts
+  %(prog)s switch user@example.com
+  %(prog)s list --json
+  %(prog)s add --slot 3                      # add to a specific slot
+  %(prog)s add-token sk-ant-oat01-... --email me@example.com
+  %(prog)s run 2 -- --resume                 # forward args after '--' to claude
         """,
     )
 
@@ -257,7 +322,7 @@ Examples:
         ),
     )
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if args.token_status and not args.list:
         parser.error("--token-status can only be used with --list")
