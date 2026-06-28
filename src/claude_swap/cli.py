@@ -161,6 +161,78 @@ Examples:
         sys.exit(130)
 
 
+def _autoswitch_command(argv: list[str]) -> None:
+    """Handle `cswap autoswitch [start|stop|status|check]` (bare = setup wizard).
+
+    Pre-dispatched like `run` because it has its own sub-verbs that can't coexist
+    with main()'s required mutually-exclusive flag group. The hidden `__run` verb
+    is the entry point the detached watcher process re-invokes on itself.
+    """
+    parser = argparse.ArgumentParser(
+        prog=f"{_prog_name()} autoswitch",
+        description=(
+            "Automatically switch to the account with the most quota left when "
+            "the active one crosses a usage-% threshold. Run with no subcommand "
+            "for the interactive setup wizard."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Subcommands:
+  (none)    interactive setup wizard (set thresholds, start/stop watcher)
+  start     start the background watcher
+  stop      stop the background watcher
+  status    show watcher state, rules, and per-account usage vs threshold
+  check     evaluate once now and switch if over threshold
+
+Examples:
+  cswap autoswitch            # set it up
+  cswap autoswitch start      # run the watcher in the background
+  cswap autoswitch status
+        """,
+    )
+    parser.add_argument(
+        "subcommand",
+        nargs="?",
+        choices=["start", "stop", "status", "check", "__run"],
+        help="What to do (omit for the setup wizard)",
+    )
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+    args = parser.parse_args(argv)
+
+    try:
+        from claude_swap import autoswitch
+
+        switcher = ClaudeAccountSwitcher(debug=args.debug)
+
+        if sys.platform != "win32":
+            if os.geteuid() == 0 and not switcher._is_running_in_container():
+                error("Error: Do not run this script as root (unless running in a container)")
+                sys.exit(1)
+
+        if args.subcommand == "__run":
+            autoswitch.run_watcher(switcher)
+        elif args.subcommand == "start":
+            pid = autoswitch.start_watcher(switcher)
+            print(f"Auto-switch watcher started (PID {pid}).")
+            print(dimmed("Stop it with 'cswap autoswitch stop'."))
+        elif args.subcommand == "stop":
+            stopped = autoswitch.stop_watcher(switcher)
+            print("Auto-switch watcher stopped." if stopped
+                  else dimmed("No auto-switch watcher was running."))
+        elif args.subcommand == "status":
+            autoswitch.print_status(switcher)
+        elif args.subcommand == "check":
+            autoswitch.print_check(switcher)
+        else:
+            autoswitch.run_wizard(switcher)
+    except ClaudeSwitchError as e:
+        error(f"Error: {e}")
+        sys.exit(1)
+    except KeyboardInterrupt:
+        print(f"\n{dimmed('Operation cancelled')}")
+        sys.exit(130)
+
+
 def main() -> None:
     """Main entry point for the CLI."""
     argv = sys.argv[1:]
@@ -169,6 +241,12 @@ def main() -> None:
     if argv and argv[0] == "run":
         _run_command(argv[1:])
         return  # only reachable in tests where exec/exit is mocked
+
+    # `autoswitch` (alias `auto`) has its own sub-verbs, so it's pre-dispatched
+    # like `run` rather than mapped to a flag.
+    if argv and argv[0] in ("autoswitch", "auto"):
+        _autoswitch_command(argv[1:])
+        return
 
     # Memorable subcommands (`ccs switch <email>`, `ccs list`, `ccs help`, ...)
     # are rewritten to the equivalent flags so the original `--flag` interface
@@ -190,13 +268,14 @@ Commands (memorable shortcuts — the classic --flags still work):
   %(prog)s add-token [TOKEN|-]        register a setup-token          (--add-token)
   %(prog)s remove <num|email>         remove an account               (--remove-account)
   %(prog)s run <num|email> [-- ...]   run as an account, this terminal only
+  %(prog)s autoswitch                 set up / control auto-switching by usage %%
   %(prog)s export <path>              export accounts                 (--export)
   %(prog)s import <path>              import accounts                 (--import)
   %(prog)s tui                        interactive arrow-key menu      (--tui)
   %(prog)s upgrade                    self-upgrade to latest          (--upgrade)
   %(prog)s purge                      remove all claude-swap data     (--purge)
 
-Aliases: ls=list  st=status  rm=remove  update=upgrade
+Aliases: ls=list  st=status  rm=remove  update=upgrade  auto=autoswitch
 
 Flags combine with subcommands exactly as with the classic interface:
   %(prog)s switch --strategy best           # pick the account with most quota left

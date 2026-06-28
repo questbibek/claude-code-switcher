@@ -96,8 +96,11 @@ can be combined freely (`ccs switch --strategy best`, `ccs list --json`).
 | `ccs export <path>` | Export accounts | `--export` |
 | `ccs import <path>` | Import accounts | `--import` |
 | `ccs tui` | Interactive arrow-key menu | `--tui` |
+| `ccs autoswitch` (`auto`) | Set up / control auto-switching by usage % | — |
 | `ccs upgrade` (`update`) | Self-upgrade to latest | `--upgrade` |
 | `ccs purge` | Remove all claude-swap data | `--purge` |
+
+Auto-switch sub-verbs: `ccs autoswitch` (setup wizard), `start`, `stop`, `status`, `check` — see [Auto-switch](#auto-switch-by-usage) below.
 
 ### Add your first account
 
@@ -133,6 +136,35 @@ cswap --switch-to user@example.com
 Or let claude-swap auto-pick by remaining quota — `cswap --switch --strategy best` (most quota left) or `--strategy next-available` (skip rate-limited accounts).
 
 **Note:** You usually don't need to restart — on Linux/Windows the new account is picked up automatically, and on macOS after the Keychain cache expires. To apply it instantly, restart Claude Code or reopen the VS Code extension tab. See [Tips](#tips) for the per-platform details.
+
+### Auto-switch by usage
+
+Instead of switching by hand, let claude-swap watch your quota and hop to the freshest account *before* the active one hits its limit. Run the setup wizard:
+
+```bash
+cswap autoswitch
+```
+
+The wizard is a small menu — set a **common threshold** that applies to every account (e.g. switch at 85% usage), optionally **override individual accounts** (e.g. keep your work account until 95%), set the poll interval, and start/stop the background watcher. Each change is saved as you go (`✓`).
+
+```text
+Auto-switch: running (PID 12345)
+  Global threshold: 85%   poll every 600s   strategy best
+  Accounts (usage vs threshold):
+   * Account-1 you@personal.com: 91% / 85% (... OVER)
+     Account-2 you@work.com:     40% / 95% (override)
+```
+
+The watcher polls each account's quota every interval and, when the **active** account's usage (the higher of its 5-hour / 7-day window) reaches its threshold, switches to the account with the most quota left — exactly `cswap switch --strategy best`. If no other account has more headroom (or there's only one account), it stays put and logs why; it never switches onto a worse account.
+
+```bash
+cswap autoswitch start      # run the watcher in the background
+cswap autoswitch status     # rules + per-account usage vs threshold
+cswap autoswitch check      # evaluate once now and switch if over threshold
+cswap autoswitch stop       # stop the watcher
+```
+
+A swap rewrites the credentials file Claude Code reads, so it takes full effect on Claude's **next** start — a session already running keeps the account it loaded. The watcher writes a log to the backup dir (`autoswitch.log`).
 
 ### Run multiple accounts at the same time (session mode)
 
